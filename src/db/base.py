@@ -34,8 +34,8 @@ class Base(DeclarativeBase):
             f"{k}={getattr(self, k)}" for k in self.get_columns()
         ]) + ")"
 
-    def __new__(cls, *args, **kwargs):
-        obj = super(Base, cls).__new__(cls, *args, **kwargs)
+    def __new__(cls, **kwargs):
+        obj = super().__new__(cls)
         obj._update_values = dict()
         return obj
 
@@ -50,7 +50,6 @@ class Base(DeclarativeBase):
             obj = getattr(self, attr_name)
             if Base in obj.__class__.mro():
                 value = obj.as_dict()
-                continue
             elif isinstance(obj, list):
                 value = [
                     (item.as_dict() if Base in item.__class__.mro() else item)
@@ -94,5 +93,3 @@ class Base(DeclarativeBase):
         if self.id:
             return self.update(session)
         self.insert(session)
-
-
