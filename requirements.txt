@@ -3,4 +3,3 @@ pyside6
 pydantic
 psycopg2-binary
 pydantic-settings
-watchdog

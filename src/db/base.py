@@ -15,9 +15,12 @@ from typing import Set
 class Base(DeclarativeBase):
     __abstract__ = True
 
+    DATETIME_FORMAT: str = "%d-%m-%Y %H:%M"
+
     id: Mapped[int] = mapped_column(primary_key=True)
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
     extra: Set = set()
+    exclude: Set = set()
 
     @declared_attr
     def __tablename__(cls):
@@ -44,7 +47,7 @@ class Base(DeclarativeBase):
         return set([column.key for column in cls.__table__.columns])
 
     def __iter__(self):
-        for attr_name in self.get_columns() | set(self.extra):
+        for attr_name in (self.get_columns() | self.extra) - self.exclude:
             if not hasattr(self, attr_name):
                 continue
             obj = getattr(self, attr_name)
@@ -55,6 +58,10 @@ class Base(DeclarativeBase):
                     (item.as_dict() if Base in item.__class__.mro() else item)
                     for item in obj
                 ]
+            elif isinstance(obj, datetime):
+                value = getattr(self, attr_name).strftime(
+                    self.DATETIME_FORMAT
+                )
             else:
                 value = getattr(self, attr_name)
             yield attr_name, value

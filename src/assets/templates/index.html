@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="../styles/index.css">
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <script src="../scripts/index.js"></script>
+</head>
+<body>
+    <div class="container">
+        <form class="form" name="auth">
+            <div class="fields">
+                <div class="form__field">
+                    <input name="username" type="text" placeholder="Введите логин" minlength="3" maxlength="50" required/>
+                    <span class="error"></span>
+                </div>
+                <div class="form__field">
+                    <input name="password" type="password" placeholder="Введите пароль" minlength="3" maxlength="50" required/>
+                    <span class="error"></span>
+                </div>
+            </div>
+            <button id="authBtn"><b>Войти</b></button>
+        </form>
+    </div>
+</body>
+</html>
