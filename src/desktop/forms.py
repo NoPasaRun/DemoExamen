@@ -37,3 +37,9 @@ class LoginForm(BaseModel):
         if hasattr(self, "_user"):
             return getattr(self, "_user")
         return None
+
+
+class SearchProductForm(BaseModel):
+    q: str = ""
+    min_price: float = 0
+    max_price: float = float('inf')

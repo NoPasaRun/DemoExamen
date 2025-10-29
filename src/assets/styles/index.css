@@ -56,3 +56,18 @@ input {
     font-size: 0.8em;
 }
 
+#noAuthBtn {
+    background: transparent;
+}
+
+.no__form {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    align-items: center;
+}
+
+.no__form > * {
+    color: blue !important;
+}
+

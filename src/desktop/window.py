@@ -7,6 +7,7 @@ from settings import app_settings
 
 class WindowEnum(StrEnum):
     auth = "index.html"
+    products = "products.html"
 
     @property
     def url(self) -> QUrl:

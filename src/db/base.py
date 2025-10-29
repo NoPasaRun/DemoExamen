@@ -27,8 +27,8 @@ class Base(DeclarativeBase):
         return "_".join(
             word.lower() for word in
             re.findall(
-                r'\b[A-Z][A-Za-z]*\b',
-                cls.__name__.capitalize()
+                r'[A-Z][a-z]*',
+                cls.__name__
             )
         )
 
@@ -52,10 +52,10 @@ class Base(DeclarativeBase):
                 continue
             obj = getattr(self, attr_name)
             if Base in obj.__class__.mro():
-                value = obj.as_dict()
+                value = dict(obj)
             elif isinstance(obj, list):
                 value = [
-                    (item.as_dict() if Base in item.__class__.mro() else item)
+                    (dict(item) if Base in item.__class__.mro() else item)
                     for item in obj
                 ]
             elif isinstance(obj, datetime):
