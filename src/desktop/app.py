@@ -48,14 +48,14 @@ class Bridge(QObject):
         try:
             form, filters = SearchProductForm(**data), list()
             if form.q:
-                q = f"{form.q}%"
+                q = f"%{form.q}%"
                 filters.append(
                     or_(
                         or_(Product.title.like(q), Product.supplier.like(q)),
                         Product.producer.like(q)
                     )
                 )
-            filters.append(Product.price.between(form.min_price, form.max_price))
+            filters.append((Product.price * (100 - Product.discount) / 100).between(form.min_price, form.max_price))
             with create_session() as session:
                 products = Product.filter(session, *filters)
                 products = [dict(p) for p in products]

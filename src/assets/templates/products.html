@@ -13,6 +13,11 @@
         <header class="header">
             <button id="logoutBtn">Выход</button>
             <span id="userInfo"></span>
+            <form name="searchForm">
+                <input name="q" type="text" placeholder="Введите текст"/>
+                <input type="number" name="min_price" min="0" placeholder="Цена мин."/>
+                <input type="number" name="max_price" min="0" placeholder="Цена макс."/>
+            </form>
         </header>
         <main class="main">
             <ul class="product__list">

@@ -27,7 +27,6 @@ class LoginForm(BaseModel):
                 "value_error",
                 "пароль не подходит",
                 {"field": "password"}
-
             )
         setattr(self, "_user", user)
         return self
@@ -40,6 +39,6 @@ class LoginForm(BaseModel):
 
 
 class SearchProductForm(BaseModel):
-    q: str = ""
-    min_price: float = 0
-    max_price: float = float('inf')
+    q: Optional[str]
+    min_price: float
+    max_price: float

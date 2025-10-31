@@ -10,15 +10,38 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from db.base import Base
 from db.connection import engine, create_session
 from settings import app_settings
+from settings import app_settings
+
+
+class RoleTypeEnum(StrEnum):
+    admin = "админ"
+    manager = "менеджер"
+    simple = "пользователь"
+    guest = "гость"
+
+    @classmethod
+    def str_values(cls):
+        return ', '.join(f"'{e.name}'" for e in cls)
 
 
 class User(Base):
     username: Mapped[str] = mapped_column(unique=True)
     password_hash: Mapped[str] = mapped_column()
     orders = relationship("Order", back_populates="user", uselist=True)
+    role_type: Mapped[str] = mapped_column(default="simle")
 
-    exclude = {"password_hash", "id"}
-    extra = {"encrypt_user_id"}
+    exclude = {"password_hash", "id", "role_type"}
+    extra = {"encrypt_user_id", "role"}
+
+    __table_args__ = (
+        CheckConstraint(
+            f"role_type in ({RoleTypeEnum.str_values()})"
+        ),
+    )
+
+    @property
+    def role(self):
+        return getattr(RoleTypeEnum, self.role_type).value
 
     @property
     def encrypt_user_id(self) -> str:
@@ -58,13 +81,13 @@ class MeasureTypeEnum(StrEnum):
 
     @classmethod
     def str_values(cls):
-        return ', '.join(f"'{e.name}'" for e in MeasureTypeEnum)
+        return ', '.join(f"'{e.name}'" for e in cls)
 
 
 class Product(Base):
 
     exclude = {"measure_type"}
-    extra = {"measure", "category"}
+    extra = {"measure", "category", "corrected_price"}
 
     order_products = relationship("OrderProduct", back_populates="product", uselist=True)
     price: Mapped[float] = mapped_column()
@@ -75,9 +98,16 @@ class Product(Base):
     supplier: Mapped[str] = mapped_column()
     producer: Mapped[str] = mapped_column()
     measure_type: Mapped[str] = mapped_column()
+    discount: Mapped[float] = mapped_column(default=0)
 
     category = relationship(Category, back_populates="products")
     category_id: Mapped[int] = Column(Integer, ForeignKey("category.id"))
+
+    @property
+    def corrected_price(self):
+        if self.discount > 0:
+            return round(self.price * (100 - self.discount) / 100, 2)
+        return None
 
     @property
     def measure(self):
@@ -122,7 +152,7 @@ if __name__ == '__main__':
     Base.metadata.create_all(engine)
 
     with create_session() as session:
-        user = User(username="user")
+        user = User(username="user", role_type="simple")
         user.set_password("user")
         user.save(session)
 
@@ -144,7 +174,9 @@ if __name__ == '__main__':
                 supplier=f"Supplier {i}",
                 producer=f"Producer {i}",
                 measure_type="pack",
-                category=random.choice(categories)
+                category=random.choice(categories),
+                image_url=f"{app_settings.root}/assets/images/image{random.randint(1, 3)}.webp",
+                discount=random.choice([None, round(random.uniform(15, 30), random.randint(0, 2))])
             )
             for i in range(1, 11)
         ]
