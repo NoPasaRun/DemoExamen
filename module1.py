@@ -1,4 +1,6 @@
+import os
 from datetime import datetime
+from pathlib import Path
 from typing import List, Any
 
 from sqlalchemy import (
@@ -20,6 +22,7 @@ engine = create_engine("postgresql+psycopg2://{}:{}@{}:{}/{}".format(
     "postgres", "postgres", "localhost", "5432", "demo"
 ))
 Session = sessionmaker(bind=engine)
+ROOT = Path(__file__).parent.resolve()
 
 
 def get_data(filepath: str) -> List[List[Any]]:
@@ -101,6 +104,12 @@ class Product(Base):
     @property
     def fixed_price(self):
         return round(self.price * (1 - self.discount / 100), 2)
+
+    @property
+    def valid_photo(self):
+        if self.photo and os.path.exists(self.photo):
+            return self.photo
+        return str(ROOT / 'import/picture.png')
 
 
 class User(Base):
@@ -191,7 +200,7 @@ def main():
                 discount=row[7],
                 quantity=row[8],
                 description=row[9],
-                photo=row[10] or None
+                photo=(row[10] and str(ROOT / 'import' / row[10])) or None
             )
             for row in data
         ]
