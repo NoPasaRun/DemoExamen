@@ -24,6 +24,7 @@ from module3 import (
     ProductForm,
     delete_product
 )
+from module4 import OrderWindow
 
 
 # ВНИМАНИЕ! В Layout можно поместить и виджет и layout. Виджету можно назначить layout но нельзя указать виджет.
@@ -194,10 +195,10 @@ class QProductWidget(QFrame):
         :return: возвращаем функцию-обработчик
         """
         def inner():
-            delete_product(product)
-            self.setParent(None)
-            # В реальном времени удаляем текущий виджет без перерендера страницы
-            self.deleteLater()
+            if delete_product(product):
+                self.setParent(None)
+                # В реальном времени удаляем текущий виджет без перерендера страницы
+                self.deleteLater()
         return inner
 
     @staticmethod
@@ -259,6 +260,9 @@ class ProductsWindow(BackwardMixin):
         if user and user.role in ["Менеджер", "Администратор"]:
             # Если менеджер или админ добавляем виджет фильтров (3-ий модуль)
             self.view.addWidget(FilterProductWidget(self.refresh))
+            # Если менеджер или админ добавляем виджет перехода на страницу заказов (4-ый модуль)
+            self.header.addWidget(btn := QPushButton("Заказы"))
+            btn.clicked.connect(self.open_order_page)
 
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
@@ -274,6 +278,12 @@ class ProductsWindow(BackwardMixin):
 
         self.header.addWidget(self.logoutBtn)
         self.layout.addLayout(self.view)
+
+    def open_order_page(self):
+        MainWindow.set_window(
+            OrderWindow("Список заказов")
+        ).show()
+        self.hide()
 
     def open_create_form(self):
         MainWindow.set_window(

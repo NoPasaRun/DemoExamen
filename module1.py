@@ -133,7 +133,7 @@ class OrderItem(Base):
     order_id = Column(Integer, ForeignKey("order.id"))
     quantity = Column(Integer)
     articul = Column(String, ForeignKey("product.articul"))
-    order = relationship("Order")
+    order = relationship("Order", back_populates="order_items")
     product = relationship("Product")
 
     # Создание ограничений ключа, в данном случае создание
@@ -152,6 +152,12 @@ class Order(Base):
     user = relationship("User")
     code = Column(Integer)
     status = Column(String)
+
+    order_items = relationship(OrderItem, back_populates="order", cascade="all, delete")
+
+    @property
+    def articuls(self):
+        return ", ".join(oi.product.articul for oi in self.order_items)
 
 
 def main():
@@ -280,7 +286,9 @@ def main():
                 address_id=row[4],
                 user_id=users[row[5]],
                 code=row[6],
-                status=row[7]
+                # Я просто в #### с того насколько это убого. Вот им делать нечего как пробелы
+                # перед текстом ставить. Тьфу, суки.
+                status=row[7].strip()
             )
             for row in data
         ]

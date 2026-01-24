@@ -187,15 +187,17 @@ def delete_product(product: Product):
         if session.query(OrderItem).filter_by(articul=product.articul).first():
             # Ну тут как будто очевидно. Если есть заказ товара а нашим артикулом
             # то есть и заказ в котором товар 'учавствует'. По ТЗ не удаляем.
-            return QMessageBox.critical(
+            QMessageBox.critical(
                 None, "Ошибка", "Нельзя удалить товар, если он в заказе"
             )
+            return False
         session.delete(product)
         session.commit()
     # Чистим фото если оно не None и существует
     if prev_filepath is not None and os.path.exists(prev_filepath):
         os.remove(prev_filepath)
-    return QMessageBox.information(None, "Успешно", "Товар удален из БД")
+    QMessageBox.information(None, "Успешно", "Товар удален из БД")
+    return True
 
 
 class ProductForm(BackwardMixin):
