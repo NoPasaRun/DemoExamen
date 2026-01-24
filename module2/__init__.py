@@ -72,4 +72,4 @@ class BaseWindow(QMainWindow):
             self.top_layout.addWidget(QLabel(user.fio))
 
         self.setWindowTitle(title)
-        self.setWindowIcon(QIcon(str(ROOT / "import/icon.png")))
+        self.setWindowIcon(QIcon(str(ROOT / "import/Icon.png")))
