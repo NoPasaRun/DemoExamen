@@ -102,7 +102,7 @@ class FilterProductWidget(QFrame):
     def filters(self):
         f = []
         if q := self.search.text().lower():
-            exp = func.lower(Product.articul).like(q + "%")
+            exp = func.lower(Product.articul).like(f"%{q}%")
             """
             Нам нужен поиск либо по имени, либо по категории, либо по описанию.
             тк or_ принимает всего два аргумента, то мы последовательно строим
@@ -112,9 +112,13 @@ class FilterProductWidget(QFrame):
                 exp = or_(
                     exp,
                     # Приводим функцией поле в бд к нижнему регистру и проверяем, что оно совпадает
-                    # с паттерном q + %, где % это 0..N символов спереди
-                    func.lower(getattr(Product, attr)).like(q + "%")
+                    # с паттерном % + q + %, где % это 0..N символов спереди и сзади
+                    func.lower(getattr(Product, attr)).like(f"%{q}%")
                 )
+            """
+            ИЗМЕНЕНИЕ: добавляем возможность фильтрации по имени компании производителя
+            """
+            exp = or_(exp, func.lower(Company.name).like(f"%{q}%"))
             f.append(exp)
         if supplier_id := self.mapper.get(self.list.currentIndex()):
             # если get не нашел индекс, значит значение None и условие не сработает,
@@ -163,10 +167,10 @@ class ImageUploader(QWidget):
             "", "Images (*.png *.jpg *.jpeg)"
         )
 
-        if new_path is not None:
+        if new_path:
             pixmap = QPixmap(new_path)
-            # Проверка на размер файла. 300x200 оч мало, даже фото в примере больше, поэтому я добавил один 0
-            if pixmap.width() * pixmap.height() > 600_000:
+            # Проверка на размер файла. 300x200 оч мало, даже фото в примере больше, поэтому я добавил два нуля
+            if pixmap.width() * pixmap.height() > 6_000_000:
                 return QMessageBox.critical(
                     self,
                     "Ошибка",
@@ -293,6 +297,15 @@ class ProductForm(BackwardMixin):
         """
         # Сначала проверяем, если у нас есть поле articul, значит мы создаем товар. Если мы создаем товар
         # значит нужно проверить что у нас articul не повторяется нигде в БД
+        reply = QMessageBox.question(
+            self,
+            'Подтверждение',
+            "Вы уверены, что хотите сохранить данные?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.No:
+            return
+
         if hasattr(self, 'articul'):
             with Session() as session:
                 if session.query(Product).filter_by(articul=self.articul.text()).first():

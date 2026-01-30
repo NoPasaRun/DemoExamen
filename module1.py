@@ -25,13 +25,18 @@ Session = sessionmaker(bind=engine)
 ROOT = Path(__file__).parent.resolve()
 
 
-def get_data(filepath: str) -> List[List[Any]]:
+def get_data(filepath: str, first_line_pass: bool = True) -> List[List[Any]]:
     """
     Вспомогательная функция которая читает данные из xlsx файла,
     проходится с первой по последнюю строку (НЕ С 0-ой, ПОТОМУ ЧТО НУЛЕВАЯ
     СТРОКА ЭТО НАЗВАНИЯ КОЛОНОК) и создает 2-ую матрицу данных,
     где каждая строка этой матрицы представляет соответствующую строку в БД
 
+    ИЗМЕНЕНИЕ: В файле "Пункты выдачи_import.xlsx" данные начинаются с 0 строки
+    так как нет заголовков, поэтому даем возможность функции знать:
+    с 1 или с 0 строки парсить (int(False) возвращает 0, а int(True) возвращает 1)
+
+    :param first_line_pass: нужен, чтобы передать с какой строки начинаем парсинг: с 0 или 1
     :param filepath: относительный путь до загружаемого файла
     :return: Список из списков значений для загрузки в БД
     """
@@ -39,7 +44,7 @@ def get_data(filepath: str) -> List[List[Any]]:
     sheet = wb.active
     return [
         [val.value for val in row]
-        for row in list(sheet.iter_rows())[1:]
+        for row in list(sheet.iter_rows())[int(first_line_pass):]
         if row[0].value
     ]
 
@@ -51,6 +56,15 @@ class Base(DeclarativeBase):
     в вашем коде
     """
     __abstract__ = True
+
+    # Функция для синхронизации id
+    def set_sync_id(self):
+        if not hasattr(self, "id"):
+            return
+        with Session() as session:
+            count = session.query(self.__class__).count()
+        self.id = count + 1
+        return self
 
 
 class Company(Base):
@@ -234,7 +248,7 @@ def main():
     # в xlsx с заказами там пронумерованы идентификаторами.
     # Самое главное это при создании адресов присвоить им
     # последовательные идентификаторы от 1 до N
-    data = get_data("import/Пункты выдачи_import.xlsx")
+    data = get_data("import/Пункты выдачи_import.xlsx", first_line_pass=False)
     with Session() as session:
         # Функция enumerate возвращает список кортежей по типу:
         # [(j, value1), (j + 1, value2), (j + 2, value3), ..., (j + n, valueN)]

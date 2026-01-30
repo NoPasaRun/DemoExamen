@@ -97,7 +97,7 @@ class OrderItemWidget(QFrame):
 
         self.quantity = QLineEdit(order_item and str(self.order_item.quantity))
         self.quantity.setPlaceholderText("Введите кол-во на складе")
-        self.quantity.setValidator(QIntValidator())
+        self.quantity.setValidator(QIntValidator(bottom=0))
 
         self.mainLayout.addWidget(self.articul)
         self.mainLayout.addWidget(self.quantity)
@@ -177,6 +177,12 @@ class OrderForm(BackwardMixin):
         :return:
         """
 
+        if not self.order_items.count():
+            QMessageBox.critical(
+                self, "Ошибка", "Заказ должен состоять как минимум из одного товара"
+            )
+            return None
+
         # Таким вот образом получаем все виджеты OrdrItemWidget.
         # И фильтруем чтобы не было None. bool(None) возвращает False.
         order_item_widgets = filter(lambda t: bool(t), [
@@ -221,6 +227,15 @@ class OrderForm(BackwardMixin):
         return [OrderItem(articul=a, quantity=int(q)) for a, q in zip(arts, qs)]
 
     def save(self):
+        reply = QMessageBox.question(
+            self,
+            'Подтверждение',
+            "Вы уверены, что хотите сохранить данные?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.No:
+            return
+
         if not (order_item_data := self.order_items_data):
             return
 
@@ -238,8 +253,8 @@ class OrderForm(BackwardMixin):
             return QMessageBox.critical(
                 self, "Ошибка", "Вы не ввели:\n" + '\n'.join(null_columns)
             )
-        self.order.deliver_at = self.deliver_at.dateTime()
-        self.order.created_at = self.created_at.dateTime()
+        self.order.deliver_at = self.deliver_at.dateTime().toPython()
+        self.order.created_at = self.created_at.dateTime().toPython()
 
         prev_address = self.order.address and self.order.address.description
         if prev_address != (g := self.address.text()):
@@ -249,10 +264,12 @@ class OrderForm(BackwardMixin):
 
             # ДА, можно делать проверку: если связь только одна, то предыдущий адрес можно удалить
             # но на хрена писать доп логику, если этого нет в ТЗ?
-            self.order.address = Address(description=g)
+            self.order.address = Address(description=g).set_sync_id()
 
         with Session() as session:
             # По такому же принципу сохраняем заказ как и товар
+            if not self.order.id:
+                self.order.set_sync_id()
             session.merge(self.order)
             session.commit()
             # Чистим хвосты. В логике синхронизации данных (cascade="all, delete" у таблицы Order)

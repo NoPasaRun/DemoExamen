@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 )
 from sqlalchemy.orm import joinedload
 
-from module1 import User, Session, Product
+from module1 import User, Session, Product, Company
 from module2 import MainWindow
 from module3 import (
     FilterProductWidget,
@@ -237,9 +237,16 @@ class ProductsWindow(BackwardMixin):
         with Session() as session:
             products = session.query(Product).where(
                 *filters
+            ).join(
+                # ИЗМЕНЕНИЕ: так как у нас происходит фильтрацию по полю связной таблицы, то нам нужно указать
+                # join. Пояснение: joinedload делает загрузку данных и НЕ вставляет join в запрос. Если нам нужен
+                # join в запросе, нужно его явно указать
+
+                # Первым параметром - таблица, вторым - способ связи
+                Company, Product.manufacturer_id == Company.id
             ).options(
                 # ВНИМАНИЕ! Чтобы объекты связанные по FK подгрузились, нужно передать их в options, через joinedload
-                # Если нужно подгрузить, к примеру у manufacturer поле которое тоже FK (у нас его нет, но предпододим,
+                # Если нужно подгрузить, к примеру у manufacturer поле которое тоже FK (у нас его нет, но предположим,
                 # что есть, к примеру industry_id, industry), то мы бы в options передали
                 # joinedload(Product.manufacturer).joinedload(Manufacturer.industry)
                 joinedload(Product.manufacturer),

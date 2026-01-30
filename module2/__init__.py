@@ -69,6 +69,7 @@ class BaseWindow(QMainWindow):
         self.layout.addWidget(header)
 
         if user := MainWindow.get_user():
+            self.top_layout.addStretch()
             self.top_layout.addWidget(QLabel(user.fio))
 
         self.setWindowTitle(title)
