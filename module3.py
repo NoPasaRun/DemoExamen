@@ -135,7 +135,7 @@ class ImageUploader(QWidget):
     def __init__(self, filepath: str):
         super().__init__()
         layout = QVBoxLayout(self)
-        self.load = None
+        self.load: QPixmap = None
 
         self.image_label = QLabel()
         self.image_label.setFixedSize(150, 150)
@@ -251,16 +251,16 @@ class ProductForm(BackwardMixin):
             self.form.addWidget(w)
 
         # Сдесь делаем привентивную валидацию числовых полей, чтобы не писать проверку на валидность
-        v1 = QDoubleValidator(0.0, 1000000.0, 2)
+        v1 = QDoubleValidator(top=0.0, bottom=1000000.0, decimals=2)
         # setLocale переводит числа с запятой в числа с точкой
         v1.setLocale(QLocale("C"))
         self.price.setValidator(v1)
 
-        v2 = QDoubleValidator(0.0, 100.0, 2)
+        v2 = QDoubleValidator(bottom=0.0, top=100.0, decimals=2)
         v2.setLocale(QLocale("C"))
         self.discount.setValidator(v2)
 
-        self.quantity.setValidator(QIntValidator())
+        self.quantity.setValidator(QIntValidator(bottom=0))
 
         self.supplierList = QComboBox()
         self.manufacturerList = QComboBox()
@@ -307,13 +307,15 @@ class ProductForm(BackwardMixin):
             return
 
         if hasattr(self, 'articul'):
+            articul = self.articul.text()
             with Session() as session:
-                if session.query(Product).filter_by(articul=self.articul.text()).first():
+                if session.query(Product).filter_by(articul=articul).first():
                     # Если повторяется, выходим из функции
                     return QMessageBox.information(
                         self, "Ошибка", "Товар с таким артикулом уже имеется"
                     )
-
+        else:
+            articul = self.product.articul
         # Наши данные по всем полям. Так как виджеты названы так же как и поля product, то впоследствии
         # очень удобно будет сопоставить их значения.
         data = {
@@ -323,7 +325,7 @@ class ProductForm(BackwardMixin):
                    for col in self.base_columns
                } | {
                    # Эти поля не QLineEdit поэтому прописываем их вручную
-                   "photo": str(ROOT / 'import' / (self.product.articul + '.jpg')) if self.photo.load else None,
+                   "photo": str(ROOT / 'import' / (articul + '.jpg')) if self.photo.load else self.product.photo,
                    "manufacturer_id": self.mapper.get(self.manufacturerList.currentIndex()),
                    "supplier_id": self.mapper.get(self.supplierList.currentIndex())
                }
@@ -339,11 +341,6 @@ class ProductForm(BackwardMixin):
             return QMessageBox.critical(
                 self, "Ошибка", f"Вы не ввели:\n{'\n'.join(null_columns)}"
             )
-
-        # Преобразуем текстовые данные к числовому типу. Ничего страшного, что quantity - float.
-        # postgres приведет его к числу. Главное чтобы числа не были строками
-        for col in ['price', 'discount', 'quantity']:
-            data[col] = float(data[col])
 
         # Сохраняем путь до старого фото
         prev_path = self.product.photo

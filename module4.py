@@ -1,3 +1,4 @@
+from PySide6.QtCore import QDate
 from PySide6.QtGui import Qt, QIntValidator
 from PySide6.QtWidgets import (
     QFrame,
@@ -145,16 +146,23 @@ class OrderForm(BackwardMixin):
         self.form.addWidget(self.status_list)
 
         self.address = QLineEdit(order and order.address.description)
-        self.address.setPlaceholderText("Введите описание")
+        self.address.setPlaceholderText("Введите адрес")
         self.form.addWidget(self.address)
+
+        self.code = QLineEdit(order and str(order.code))
+        self.code.setPlaceholderText("Введите код получения")
+        self.code.setValidator(QIntValidator(bottom=0))
+        self.form.addWidget(self.code)
 
         self.created_at = QDateTimeEdit(order and order.created_at)
         # Устанавливаем формат отображения даты
         self.created_at.setDisplayFormat("dd.MM.yyyy HH:mm")
+        self.created_at.setMinimumDate(QDate.currentDate())
         self.form.addWidget(self.created_at)
 
         self.deliver_at = QDateTimeEdit(order and order.deliver_at)
         self.deliver_at.setDisplayFormat("dd.MM.yyyy HH:mm")
+        self.deliver_at.setMinimumDate(QDate.currentDate())
         self.form.addWidget(self.deliver_at)
 
         self.form.addWidget(btn := QPushButton("Сохранить"))
@@ -242,10 +250,10 @@ class OrderForm(BackwardMixin):
         self.order.order_items = order_item_data
         self.order.status = self.status_list.currentText()
 
-        ru_names = ["дату доставки", "дату создания", "адрес"]
+        ru_names = ["дату доставки", "дату создания", "адрес", "код"]
         null_columns = [
             "  " + ru
-            for ru, attr in zip(ru_names, ["deliver_at", "created_at", "address"])
+            for ru, attr in zip(ru_names, ["deliver_at", "created_at", "address", "code"])
             if not getattr(self, attr).text()
         ]
         # Такая же проверка на null как и с товарами
@@ -253,8 +261,16 @@ class OrderForm(BackwardMixin):
             return QMessageBox.critical(
                 self, "Ошибка", "Вы не ввели:\n" + '\n'.join(null_columns)
             )
+
         self.order.deliver_at = self.deliver_at.dateTime().toPython()
         self.order.created_at = self.created_at.dateTime().toPython()
+
+        if self.order.deliver_at < self.order.created_at:
+            return QMessageBox.critical(
+                self,
+                "Ошибка",
+                "Даты доставки не может быть раньше даты создания заказа"
+            )
 
         prev_address = self.order.address and self.order.address.description
         if prev_address != (g := self.address.text()):
@@ -264,12 +280,14 @@ class OrderForm(BackwardMixin):
 
             # ДА, можно делать проверку: если связь только одна, то предыдущий адрес можно удалить
             # но на хрена писать доп логику, если этого нет в ТЗ?
-            self.order.address = Address(description=g).set_sync_id()
+            with Session() as session:
+                existing = session.query(Address).filter_by(description=g).first()
+                self.order.address = existing or Address(description=g)
+        self.order.user = MainWindow.get_user()
+        self.order.code = self.code.text()
 
         with Session() as session:
             # По такому же принципу сохраняем заказ как и товар
-            if not self.order.id:
-                self.order.set_sync_id()
             session.merge(self.order)
             session.commit()
             # Чистим хвосты. В логике синхронизации данных (cascade="all, delete" у таблицы Order)

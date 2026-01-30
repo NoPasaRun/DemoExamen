@@ -57,15 +57,6 @@ class Base(DeclarativeBase):
     """
     __abstract__ = True
 
-    # Функция для синхронизации id
-    def set_sync_id(self):
-        if not hasattr(self, "id"):
-            return
-        with Session() as session:
-            count = session.query(self.__class__).count()
-        self.id = count + 1
-        return self
-
 
 class Company(Base):
     __tablename__ = "company"
@@ -253,7 +244,7 @@ def main():
         # Функция enumerate возвращает список кортежей по типу:
         # [(j, value1), (j + 1, value2), (j + 2, value3), ..., (j + n, valueN)]
         # Где j - это число стартового индекса. В нашем случае с 1 и до n
-        addresses = [Address(id=id_, description=row[0]) for id_, row in enumerate(data, 1)]
+        addresses = [Address(description=row[0]) for row in data]
         session.bulk_save_objects(addresses, return_defaults=True)
         session.commit()
 
@@ -292,7 +283,6 @@ def main():
     with Session() as session:
         orders = [
             Order(
-                id=row[0],
                 # Можете сказать, что это костыль и будете правы. Но нигде в ТЗ не сказано
                 # как обрабатывать ущербность данных и я сделал так как счел нужным
                 created_at=row[2] if isinstance(row[2], datetime) else datetime(year=2025, month=3, day=2),
