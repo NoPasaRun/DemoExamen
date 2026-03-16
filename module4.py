@@ -16,46 +16,34 @@ from PySide6.QtWidgets import (
 from sqlalchemy.orm import joinedload
 
 from module1 import Session, Order, OrderItem, Product, Address
-from module2 import MainWindow
+from module2 import Global, msg
 from module3 import BackwardMixin
 
 
 class OrderWidget(QFrame):
-    """
-    Класс карточки заказа
-    """
     def __init__(self, order: Order):
         super().__init__()
 
-        self.mainLayout = QHBoxLayout()
+        main = QHBoxLayout(self)
 
-        self.info = QVBoxLayout()
-        self.info.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        main.addLayout(info := QVBoxLayout())
+        info.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
-        self.info.addWidget(QLabel(order.articuls))
-        self.info.addWidget(QLabel(order.status))
-        self.info.addWidget(QLabel(order.address.description))
-        # ВНИМАНИЕ! QLabel принимает только текст. Поэтому нужно привести дату к строке
-        self.info.addWidget(QLabel(order.created_at.strftime('%d.%m.%Y %H:%M')))
+        info.addWidget(QLabel(f"Артикул: {order.articul}"))
+        info.addWidget(QLabel(f"Статус: {order.status}"))
+        info.addWidget(QLabel(f"Адрес: {order.address.description}"))
+        info.addWidget(QLabel(f"Дата создания: {order.created_at.strftime('%d.%m.%Y %H:%M')}"))
 
-        self.mainLayout.addLayout(self.info)
-        self.mainLayout.addStretch()
+        main.addStretch()
+        main.addLayout(other := QHBoxLayout())
+        other.addWidget(QLabel(f"Дата доставки: {order.deliver_at.strftime('%d.%m.%Y %H:%M')}"))
 
-        self.mainLayout.addWidget(QLabel(order.deliver_at.strftime('%d.%m.%Y %H:%M')))
-
-        # Так же как и с товаром - если админ, то суем кнопки для edit/delete
-        if (user := MainWindow.get_user()) and user.role == "Администратор":
-            self.mainLayout.addStretch()
-            action_layout = QVBoxLayout()
-
-            action_layout.addWidget(edit_btn := QPushButton("Редактировать"))
+        if Global.user.role == "Администратор":
+            other.addLayout(buttons := QVBoxLayout())
+            buttons.addWidget(edit_btn := QPushButton("Редактировать"))
             edit_btn.clicked.connect(self.open_edit_order_page(order))
-            action_layout.addWidget(delete_btn := QPushButton("Удалить"))
+            buttons.addWidget(delete_btn := QPushButton("Удалить"))
             delete_btn.clicked.connect(self.delete_order(order))
-
-            self.mainLayout.addLayout(action_layout)
-
-        self.setLayout(self.mainLayout)
 
     def delete_order(self, order: Order):
         def inner():
@@ -64,177 +52,128 @@ class OrderWidget(QFrame):
                 session.commit()
             self.setParent(None)
             self.deleteLater()
-            QMessageBox.information(self, "Успешно", "Заказ удален из БД")
+            msg(self, "Заказ удален из БД", "Успешно")
         return inner
 
     @staticmethod
     def open_edit_order_page(order: Order):
         def inner():
-            current = MainWindow()
-            MainWindow.set_window(
-                OrderForm("Редактирование заказа", order=order)
-            ).show()
+            current = Global.window
+            Global.window = OrderForm("Редактирование заказа", order=order)
+            Global.window.show()
             current.hide()
         return inner
 
 
 class OrderItemWidget(QFrame):
-    """
-    Класс Товара Заказа. Так как это отдельная сущность, делаем отдельный класс для него
-    """
     def __init__(self, order_item: OrderItem = None):
         super().__init__()
         self.order_item = order_item or OrderItem()
-        self.mainLayout = QHBoxLayout()
+        main = QHBoxLayout(self)
 
-        """
-        ДА, по-хорошему тут должен быть список доступных артикулов, но проще
-        послать пользователя, если артикул не найден, чем создавать, список...
-        Или не проще. Anyway, в ТЗ не прописано что должен быть именно список, так 
-        что вот так вот, вот так вот.
-        """
-        self.articul = QLineEdit(self.order_item.articul)
-        self.articul.setPlaceholderText("Введите артикул товара")
+        self.product_articul = QLineEdit(self.order_item.product_articul)
+        self.product_articul.setPlaceholderText("Введите артикул товара")
 
         self.quantity = QLineEdit(order_item and str(self.order_item.quantity))
         self.quantity.setPlaceholderText("Введите кол-во на складе")
         self.quantity.setValidator(QIntValidator(bottom=0))
 
-        self.mainLayout.addWidget(self.articul)
-        self.mainLayout.addWidget(self.quantity)
-        self.mainLayout.addWidget(delete_btn := QPushButton("Удалить"))
+        main.addWidget(self.product_articul)
+        main.addWidget(self.quantity)
+        main.addWidget(delete_btn := QPushButton("Удалить"))
         delete_btn.clicked.connect(self.delete)
 
-        self.setLayout(self.mainLayout)
-
-    # Из БД нам не нужно удалять OrderItem (только из списка)
-    # поскольку удалять/добавлять OrderItem будем только при нажатии на Сохранить
     def delete(self):
         self.setParent(None)
         self.deleteLater()
 
 
 class OrderForm(BackwardMixin):
-    """
-    Класс-форма редактирования/создания заказа
-    """
     def __init__(self, *args, order: Order = None):
         super().__init__(*args)
         self.order = order or Order()
-        self.form = QVBoxLayout()
+        self.body.addLayout(form := QVBoxLayout())
+        self.base_columns = Order.get_fields({"articul"})
 
-        # Так как мы можем создавать неограниченное число OrderItem, то по-хорошему
-        # все это дело нужно поместить в ScrollArea. Ну или ограничить кол-во.
-        self.scroll = QScrollArea()
-        self.scroll.setWidgetResizable(True)
-        self.scrollContent = QWidget()
-        self.scroll.setWidget(self.scrollContent)
+        form.addWidget(scroll := QScrollArea())
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(scroll_content := QWidget())
 
-        self.order_items = QVBoxLayout(self.scrollContent)
+        self.order_items = QVBoxLayout(scroll_content)
         for order_item in self.order.order_items:
             self.order_items.addWidget(OrderItemWidget(order_item))
 
-        self.form.addWidget(self.scroll)
-        self.form.addWidget(add_btn := QPushButton("Добавить товар"))
-        add_btn.clicked.connect(self.add_order_item_widget)
+        form.addWidget(add_btn := QPushButton("Добавить товар"))
+        add_btn.clicked.connect(lambda: self.order_items.addWidget(OrderItemWidget()))
 
         self.status_list = QComboBox()
         self.status_list.addItems(c := ["Завершен", "Новый"])
         self.status_list.setCurrentIndex(
             self.order.status in c and c.index(self.order.status)
         )
-        self.form.addWidget(self.status_list)
+        form.addWidget(self.status_list)
 
         self.address = QLineEdit(order and order.address.description)
         self.address.setPlaceholderText("Введите адрес")
-        self.form.addWidget(self.address)
+        form.addWidget(self.address)
 
         self.code = QLineEdit(order and str(order.code))
         self.code.setPlaceholderText("Введите код получения")
         self.code.setValidator(QIntValidator(bottom=0))
-        self.form.addWidget(self.code)
+        form.addWidget(self.code)
 
         self.created_at = QDateTimeEdit(order and order.created_at)
-        # Устанавливаем формат отображения даты
         self.created_at.setDisplayFormat("dd.MM.yyyy HH:mm")
         self.created_at.setMinimumDate(QDate.currentDate())
-        self.form.addWidget(self.created_at)
+        form.addWidget(self.created_at)
 
         self.deliver_at = QDateTimeEdit(order and order.deliver_at)
         self.deliver_at.setDisplayFormat("dd.MM.yyyy HH:mm")
         self.deliver_at.setMinimumDate(QDate.currentDate())
-        self.form.addWidget(self.deliver_at)
+        form.addWidget(self.deliver_at)
 
-        self.form.addWidget(btn := QPushButton("Сохранить"))
+        form.addWidget(btn := QPushButton("Сохранить"))
         btn.clicked.connect(self.save)
-
-        self.layout.addLayout(self.form)
-
-    def add_order_item_widget(self):
-        """
-        Добавляем новый OrderItemWidget если добавляется товар в заказ
-        :return:
-        """
-        self.order_items.addWidget(OrderItemWidget())
 
     @property
     def order_items_data(self):
-        """
-        Так как order_items это специфичное поле, которое не примитив как str или float
-        лучше обработать его в отдельной функции
-        :return:
-        """
-
         if not self.order_items.count():
-            QMessageBox.critical(
-                self, "Ошибка", "Заказ должен состоять как минимум из одного товара"
+            msg(
+                self, "Заказ должен состоять как минимум из одного товара", "Ошибка"
             )
             return None
 
-        # Таким вот образом получаем все виджеты OrdrItemWidget.
-        # И фильтруем чтобы не было None. bool(None) возвращает False.
         order_item_widgets = filter(lambda t: bool(t), [
             self.order_items.itemAt(i).widget()
             for i in range(self.order_items.count())
         ])
-
-        # Создаем список артикулов и отдельно список количеств для
-        # сепаратной валидации
         arts, qs = zip(*[
-            (c.articul.text(), c.quantity.text())
+            (c.product_articul.text(), c.quantity.text())
             for c in order_item_widgets
         ])
-
-        # Если у нас повторятся артикулы (а они будут повторяться если уникальное множество
-        # всех артикулов отличается от общей длины) то возвращаем None и выводим ошибку
         if len(set(arts)) != len(arts):
-            QMessageBox.critical(
-                self, "Ошибка", "Артикулы товаров не должны повторятся"
+            msg(
+                self, "Артикулы товаров не должны повторятся", "Ошибка"
             )
             return None
 
-        # Если есть пустые поля, валидация не пройдена
         if '' in arts or '' in qs:
-            QMessageBox.critical(
-                self, "Ошибка",
-                "Заполните все артикулы и кол-ва на складе, либо удалите поле"
+            msg(
+                self,
+                "Заполните все артикулы и кол-ва на складе, либо удалите поле",
+                "Ошибка"
             )
             return None
-
         with Session() as session:
-            # Если хотя бы один артикул не привязан к реальному товару, то валидация не пройдена
             if not all([session.query(Product).filter_by(articul=a).first() for a in arts]):
-                QMessageBox.critical(
-                    self, "Ошибка", "Вы ввели артикулы не существующих товаров"
+                msg(
+                    self, "Вы ввели артикулы не существующих товаров", "Ошибка"
                 )
                 return None
 
-        # zip(*zip(a, b)) возвращает a, b те вначале у нас был список (c.articul.text(), c.quantity.text())
-        # потом мы применили zip и получили отдельно артикулы, отдельно кол-ва, теперь мы снова применяем
-        # zip и получаем список из (артикул, кол-во)
-        return [OrderItem(articul=a, quantity=int(q)) for a, q in zip(arts, qs)]
+        return [OrderItem(product_articul=a, quantity=int(q)) for a, q in zip(arts, qs)]
 
-    def save(self):
+    def ask(self):
         reply = QMessageBox.question(
             self,
             'Подтверждение',
@@ -242,72 +181,71 @@ class OrderForm(BackwardMixin):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if reply == QMessageBox.StandardButton.No:
-            return
+            return False
+        return True
 
-        if not (order_item_data := self.order_items_data):
-            return
+    def get_data(self, session):
+        created_at = self.created_at.dateTime().toPython()
+        deliver_at = self.deliver_at.dateTime().toPython()
 
-        self.order.order_items = order_item_data
-        self.order.status = self.status_list.currentText()
-
-        ru_names = ["дату доставки", "дату создания", "адрес", "код"]
-        null_columns = [
-            "  " + ru
-            for ru, attr in zip(ru_names, ["deliver_at", "created_at", "address", "code"])
-            if not getattr(self, attr).text()
-        ]
-        # Такая же проверка на null как и с товарами
-        if null_columns:
-            return QMessageBox.critical(
-                self, "Ошибка", "Вы не ввели:\n" + '\n'.join(null_columns)
-            )
-
-        self.order.deliver_at = self.deliver_at.dateTime().toPython()
-        self.order.created_at = self.created_at.dateTime().toPython()
-
-        if self.order.deliver_at < self.order.created_at:
-            return QMessageBox.critical(
+        if deliver_at < created_at:
+            msg(
                 self,
-                "Ошибка",
-                "Даты доставки не может быть раньше даты создания заказа"
+                "Даты доставки не может быть раньше даты создания заказа",
+                "Ошибка"
             )
+            return None
 
-        prev_address = self.order.address and self.order.address.description
-        if prev_address != (g := self.address.text()):
-            # Так как адрес у нас текстовое поле, а реально это сущность в БД
-            # то мы создаем новую сущность если новый адрес отличается от предыдущего
-            # ВНИМАНИЕ. Предыдущий адрес не удаляем тк на него могут ссылаться другие заказы
+        address = self.order.address
+        if address.description != (g := self.address.text()):
+            address = session.query(Address).filter_by(description=g).first()
+            if not address:
+                session.add(address := Address(description=g))
+            session.flush()
+        return {
+            "created_at": created_at,
+            "deliver_at": deliver_at,
+            "user_id": Global.user.id,
+            "address_id": address.id,
+            "code": self.code.text(),
+            "status": self.status_list.currentText()
+        }
 
-            # ДА, можно делать проверку: если связь только одна, то предыдущий адрес можно удалить
-            # но на хрена писать доп логику, если этого нет в ТЗ?
-            with Session() as session:
-                existing = session.query(Address).filter_by(description=g).first()
-                self.order.address = existing or Address(description=g)
-        self.order.user = MainWindow.get_user()
-        self.order.code = self.code.text()
+    def null_check(self, data):
+        null_columns = [
+            "  " + label
+            for label, attr in self.base_columns
+            if not data[attr]
+        ]
+        if null_columns:
+            msg(
+                self, "Вы не ввели:\n" + '\n'.join(null_columns), "Ошибка"
+            )
+            return False
+        return True
+
+    def save(self):
+        if not self.ask() or not (order_item_data := self.order_items_data):
+            return None
 
         with Session() as session:
-            # По такому же принципу сохраняем заказ как и товар
+            data = self.get_data(session)
+            if not data or not self.null_check(data):
+                return session.rollback()
+
+            for attr, value in data.items():
+                setattr(self.order, attr, value)
+            self.order.order_items = order_item_data
             session.merge(self.order)
+            session.flush()
+            session.query(OrderItem).filter_by(order_articul=None).delete()
             session.commit()
-            # Чистим хвосты. В логике синхронизации данных (cascade="all, delete" у таблицы Order)
-            # у нас предыдущим OrderItem присваивается null на order_id. Можно в принципе не чистить,
-            # Но это буквально 2 строчки кода.
-            session.query(OrderItem).filter_by(order_id=None).delete()
-            session.commit()
-        QMessageBox.information(self, "Успешно", "Данные о заказе сохранены в БД")
+        return QMessageBox.information(self, "Успешно", "Данные о заказе сохранены в БД")
 
 
 class OrderWindow(BackwardMixin):
-    """
-    Окно с заказами
-    """
     def refresh(self):
-        """
-        Обновление по такому же принципу как и с товарами, но только без фильтрации
-        :return:
-        """
-        order_content = QWidget(self)
+        order_content = QWidget()
         order_layout = QVBoxLayout(order_content)
 
         with Session() as session:
@@ -317,7 +255,6 @@ class OrderWindow(BackwardMixin):
             ).all()
             for order in orders:
                 order_layout.addWidget(OrderWidget(order))
-
         self.scroll.setWidget(order_content)
 
     def show(self):
@@ -329,15 +266,13 @@ class OrderWindow(BackwardMixin):
 
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
+        self.body.addWidget(self.scroll)
 
-        self.layout.addWidget(self.scroll)
-
-        if (user := MainWindow.get_user()) and user.role == "Администратор":
-            self.layout.addWidget(btn := QPushButton("Создать новый заказ"))
+        if Global.user.role == "Администратор":
+            self.body.addWidget(btn := QPushButton("Создать новый заказ"))
             btn.clicked.connect(self.open_create_form)
 
     def open_create_form(self):
-        MainWindow.set_window(
-            OrderForm("Создание заказ")
-        ).show()
+        Global.window = OrderForm("Создание заказ")
+        Global.window.show()
         self.hide()
