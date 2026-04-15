@@ -6,7 +6,7 @@ from typing import List, Any
 from sqlalchemy import (
     Column, Integer, create_engine,
     String, Float, ForeignKey,
-    UniqueConstraint, DateTime
+    UniqueConstraint, DateTime, Boolean
 )
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -51,16 +51,18 @@ class Base(DeclarativeBase):
         return [col.key for col in cls.__table__.columns if col.key not in exclude]
 
     @classmethod
-    def get_fields(cls, exclude = None):
-        return [
-            (getattr(cls, col).info.get("label"), col)
-            for col in cls.get_columns(exclude)
-        ]
+    def filter(cls, session, **kwargs):
+        return session.query(cls).filter_by(**kwargs)
 
 
 class Company(Base):
     __tablename__ = "company"
-    name = Column(String, primary_key=True, info={"label": "компания", "display": True})
+    name = Column(String, primary_key=True, info={"label": "название"})
+
+    verbose_name = "компании"
+
+    def __str__(self):
+        return self.name
 
 
 class Product(Base):
@@ -68,18 +70,27 @@ class Product(Base):
     articul = Column(String, primary_key=True, info={"label": "артикул"})
     name = Column(String, info={"label": "название"})
     measure_type = Column(String, info={"label": "единица измерения"})
-    price = Column(Float, info={"label": "цена"})
+    price = Column(Float, info={"label": "цена", "range": (0, 1_000_000), "decimals": 2})
 
-    supplier_name = Column(String, ForeignKey("company.name"), info={"label": "поставщик"})
-    supplier = relationship(Company, foreign_keys=[supplier_name])
+    supplier_name = Column(String, ForeignKey("company.name"))
+    supplier = relationship(
+        Company, foreign_keys=[supplier_name],
+        info={"label": "поставщик", "choices": lambda session: Company.filter(session)}
+    )
 
-    man_name = Column(String, ForeignKey("company.name"), info={"label": "производитель"})
-    man = relationship(Company, foreign_keys=[man_name])
+    man_name = Column(String, ForeignKey("company.name"))
+    man = relationship(
+        Company, foreign_keys=[man_name],
+        info={"choices": lambda session: Company.filter(session), "label": "производитель"}
+    )
     category = Column(String, info={"label": "категория"})
-    discount = Column(Float, default=0, info={"label": "скидка"})
-    quantity = Column(Integer, info={"label": "количество"})
+    discount = Column(Float, default=0, info={"label": "скидка", "range": (0, 100), "decimals": 2})
+    quantity = Column(Integer, info={"label": "количество", "range": (0, 1_000_000)})
     description = Column(String, info={"label": "описание"})
-    photo = Column(String, nullable=True, info={"label": "Фото", "type": "image"})
+    photo = Column(String, nullable=True, info={"label": "фото"})
+
+    verbose_name = "товара"
+    exclude_columns = {"supplier_name", "man_name"}
 
     @property
     def fixed_price(self):
@@ -91,32 +102,58 @@ class Product(Base):
             return self.photo
         return str(ROOT / 'import/picture.png')
 
+    def __str__(self):
+        return f"{self.name} произведено {self.man_name}"
+
 
 class User(Base):
     __tablename__ = "user"
     id = Column(Integer, primary_key=True)
-    role = Column(String)
-    fio = Column(String, info={"display": True, "label": "ФИО"})
-    login = Column(String, unique=True)
-    password = Column(String)
+    role = Column(String, info={"label": "роль"})
+    fio = Column(String, info={"label": "ФИО"})
+    login = Column(String, unique=True, info={"label": "логин"})
+    password = Column(String, info={"label": "пароль"})
+    is_active = Column(Boolean, info={"label": "активен да/нет"}, default=True)
+
+    def __str__(self):
+        return self.fio
+
+
+    verbose_name = "пользователя"
+    exclude_columns = {"id"}
 
 
 class Address(Base):
     __tablename__ = "address"
     id = Column(Integer, primary_key=True)
-    description = Column(String)
+    description = Column(String, info={"label": "описание"})
+
+    verbose_name = "адреса"
+    exclude_columns = {"id"}
+
+    def __str__(self):
+        out, desc = [], self.description.split()
+        while sum(map(len, out)) < 30 and desc:
+            out.append(desc.pop(0))
+        return " ".join(out) + ("..." if desc else "")
 
 
 class OrderItem(Base):
     __tablename__ = "order_item"
     id = Column(Integer, primary_key=True)
-    order_articul = Column(Integer, ForeignKey("order.articul"), info={"label": "Товары", "display": True})
-    product_articul = Column(String, ForeignKey("product.articul"))
-    quantity = Column(Integer)
+    order_articul = Column(Integer, ForeignKey("order.articul"), info={"label": "артикул заказа"})
+    product_articul = Column(String, ForeignKey("product.articul"), info={"label": "артикул товара"})
+    quantity = Column(Integer, info={"label": "кол-во"})
     order = relationship("Order", back_populates="order_items")
     product = relationship("Product")
 
+    verbose_name = "товар заказа"
+    exclude_columns = {"id"}
+
     __table_args__ = (UniqueConstraint("order_articul", "product_articul"),)
+
+    def __str__(self):
+        return f"Товар {self.product}, {self.quantity} {self.product.measure_type}"
 
 
 class Order(Base):
@@ -124,22 +161,19 @@ class Order(Base):
     articul = Column(Integer, primary_key=True, info={"label": "артикул"})
     created_at = Column(DateTime, nullable=True, info={"label": "дата создания"})
     deliver_at = Column(DateTime, nullable=True, info={"label": "дата доставки"})
-    address_id = Column(Integer, ForeignKey("address.id"), info={"label": "адрес", "mode": "create"})
-    user_id = Column(Integer, ForeignKey("user.id"), info={"label": "пользователь"})
-    address = relationship("Address")
-    user = relationship("User")
-    code = Column(Integer, info={"label": "код", "range": (0, 999)})
-    status = Column(String, info={"label": "статус", "choices": [("Новый", "Новый"), ("Старый", "Старый")]})
+    address_id = Column(Integer, ForeignKey("address.id"))
+    user_id = Column(Integer, ForeignKey("user.id"))
+    address = relationship("Address", info={"label": "адрес"})
+    user = relationship("User", info={"label": "пользователь"})
+    code = Column(Integer, info={"label": "код"})
+    status = Column(String, info={"label": "статус", "choices": ("Новый", "Старый")})
+
+    verbose_name = "заказа"
+    exclude_columns = {"address_id", "user_id"}
 
     order_items = relationship(
-        OrderItem,
-        back_populates="order",
-        cascade="all, delete",
-        info={
-            "label": "состав заказа",
-            "mode": "create",
-            "columns": ["product_articul", "quantity"]
-        }
+        OrderItem, back_populates="order",
+        cascade="all, delete", info={"label": "товары заказа"}
     )
 
 
