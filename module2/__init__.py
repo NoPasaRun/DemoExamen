@@ -7,70 +7,42 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QVBoxLayout,
     QLabel,
-    QMainWindow
+    QMainWindow, QMessageBox
 )
 
 from module1 import User, ROOT
 
 
-class MainWindow:
-    """
-    Короче, глобальные переменные - это практика говна. Принцип как бы не поменялся,
-    но синглтон, это как бы паттерн, а global - антипаттерн, поэтому вот так.
-
-    Тут у нас хранится ОДНО активное окно и ОДИН активный пользователь, чтобы не
-    морочиться с синхронизацией между несколькими окнами.
-    """
-    __instance: QMainWindow = None
-    __user: User = None
-
-    def __new__(cls) -> Optional[QMainWindow]:
-        return cls.__instance
-
-    @classmethod
-    def set_window(cls, window: Optional[QMainWindow]):
-        cls.__instance = window
-        return cls.__instance
-
-    @classmethod
-    def set_user(cls, user: Optional[User]):
-        cls.__user = user
-
-    @classmethod
-    def get_user(cls):
-        return cls.__user
+class Global:
+    window: Optional[QMainWindow] = None
+    user: Optional[User] = None
 
 
 class BaseWindow(QMainWindow):
 
-    """
-    Тупое наследование - это плохо, но лучше так, чем copy-paste.
-
-    Тут выносим повторяющиеся виджеты - Заголовок страницы, иконка, шапка
-    и ФИО, если пользователь есть в MainWindow
-    """
-
     def __init__(self, title: str):
         super().__init__()
-        self.header = QHBoxLayout(header := QWidget())
-
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        central_widget.setFixedSize(1280, 720)
 
-        self.layout = QVBoxLayout(central_widget)
-        self.top_layout = QHBoxLayout(top_layout := QWidget())
+        self.body = QVBoxLayout(central_widget)
+        self.title, self.header = QHBoxLayout(), QHBoxLayout()
 
-        self.top_layout.addWidget(QLabel(
+        self.title.addWidget(QLabel(
             f"<h1>{title}</h1>"
         ), alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        self.layout.addWidget(top_layout)
-        self.layout.addWidget(header)
+        self.body.addLayout(self.header)
+        self.body.addLayout(self.title)
 
-        if user := MainWindow.get_user():
-            self.top_layout.addStretch()
-            self.top_layout.addWidget(QLabel(user.fio))
+        if Global.user:
+            self.header.addStretch()
+            self.header.addWidget(QLabel(Global.user.fio))
 
         self.setWindowTitle(title)
         self.setWindowIcon(QIcon(str(ROOT / "import/Icon.png")))
+
+
+def msg(parent, text, title="Инфо", crit=False):
+    func = QMessageBox.critical if crit else QMessageBox.information
+    func(parent, title, text)
